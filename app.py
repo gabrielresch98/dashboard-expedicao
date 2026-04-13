@@ -33,9 +33,7 @@ TRANSPORTADORAS = {
     "correios": ["correios", "pac", "sedex"],
 }
 
-# Cache de dados em memória
 dados_cache = {}
-ultima_atualizacao = None
 
 # ─── FUNÇÕES ──────────────────────────────────────────────────────────────────
 
@@ -86,7 +84,6 @@ def buscar_conta(nome, token):
     try:
         embalados = pesquisar_separacoes(token, SITUACOES["embaladas"])
         contagem  = {"mandae": 0, "correios": 0, "outros": 0}
-
         cache_formas = {}
         try:
             r = requests.post(f"{BASE_URL}/formas.envio.pesquisa.php", data={"token": token, "formato": "json"}, timeout=10)
@@ -94,12 +91,10 @@ def buscar_conta(nome, token):
                 cache_formas[str(f.get("id", ""))] = f.get("nome", "")
         except Exception:
             pass
-
         for item in embalados:
             id_forma   = str(item.get("idFormaEnvio", ""))
             nome_forma = cache_formas.get(id_forma, "")
             contagem[classificar_transportadora(nome_forma)] += 1
-
         resultado["embaladas"]               = len(embalados)
         resultado["embaladas_transportadora"] = contagem
     except Exception as e:
@@ -112,14 +107,13 @@ def buscar_conta(nome, token):
 
 
 def atualizar_dados():
-    global dados_cache, ultima_atualizacao
+    global dados_cache
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Atualizando dados...")
     output = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for chave, config in CONTAS.items():
         output[chave] = buscar_conta(config["nome"], config["token"])
     dados_cache = output
-    ultima_atualizacao = datetime.now()
-    print(f"[OK] Dados atualizados")
+    print(f"[OK] Dados atualizados: {json.dumps(output, ensure_ascii=False)}")
 
 
 def loop_atualizacao():
@@ -128,7 +122,7 @@ def loop_atualizacao():
             atualizar_dados()
         except Exception as e:
             print(f"[ERRO] Loop: {e}")
-        time.sleep(120)  # atualiza a cada 2 minutos
+        time.sleep(120)
 
 
 # ─── ROTAS ────────────────────────────────────────────────────────────────────
@@ -143,12 +137,14 @@ def data():
     return jsonify(dados_cache)
 
 
-# ─── MAIN ─────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    # Busca dados iniciais antes de subir
+# ─── STARTUP — roda tanto com python app.py quanto com gunicorn ───────────────
+def iniciar():
     atualizar_dados()
-    # Inicia loop de atualização em background
     t = threading.Thread(target=loop_atualizacao, daemon=True)
     t.start()
+
+# Inicia ao importar o módulo (funciona com gunicorn)
+iniciar()
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
