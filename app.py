@@ -34,6 +34,7 @@ TRANSPORTADORAS = {
 }
 
 dados_cache = {}
+_iniciado = False
 
 # ─── FUNÇÕES ──────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ def buscar_conta(nome, token):
         try:
             resultado[chave] = len(pesquisar_separacoes(token, situacao))
         except Exception as e:
-            print(f"[ERRO] {nome}/{chave}: {e}")
+            print(f"[ERRO] {nome}/{chave}: {e}", flush=True)
             resultado[chave] = 0
 
     try:
@@ -98,7 +99,7 @@ def buscar_conta(nome, token):
         resultado["embaladas"]               = len(embalados)
         resultado["embaladas_transportadora"] = contagem
     except Exception as e:
-        print(f"[ERRO] {nome}/embaladas: {e}")
+        print(f"[ERRO] {nome}/embaladas: {e}", flush=True)
         resultado["embaladas"]               = 0
         resultado["embaladas_transportadora"] = {"mandae": 0, "correios": 0, "outros": 0}
 
@@ -108,12 +109,13 @@ def buscar_conta(nome, token):
 
 def atualizar_dados():
     global dados_cache
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Atualizando dados...")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Atualizando dados...", flush=True)
     output = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for chave, config in CONTAS.items():
+        print(f"  -> {config['nome']}...", flush=True)
         output[chave] = buscar_conta(config["nome"], config["token"])
     dados_cache = output
-    print(f"[OK] Dados atualizados: {json.dumps(output, ensure_ascii=False)}")
+    print(f"[OK] {json.dumps({k: v.get('total',0) for k,v in output.items() if k != 'updated_at'})}", flush=True)
 
 
 def loop_atualizacao():
@@ -121,7 +123,7 @@ def loop_atualizacao():
         try:
             atualizar_dados()
         except Exception as e:
-            print(f"[ERRO] Loop: {e}")
+            print(f"[ERRO] Loop: {e}", flush=True)
         time.sleep(120)
 
 
@@ -137,14 +139,17 @@ def data():
     return jsonify(dados_cache)
 
 
-# ─── STARTUP — roda tanto com python app.py quanto com gunicorn ───────────────
-def iniciar():
-    atualizar_dados()
-    t = threading.Thread(target=loop_atualizacao, daemon=True)
-    t.start()
+# ─── STARTUP com before_request (compatível com gunicorn) ─────────────────────
 
-# Inicia ao importar o módulo (funciona com gunicorn)
-iniciar()
+@app.before_request
+def startup():
+    global _iniciado
+    if not _iniciado:
+        _iniciado = True
+        print("[STARTUP] Iniciando thread de atualização...", flush=True)
+        t = threading.Thread(target=loop_atualizacao, daemon=True)
+        t.start()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
