@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify, render_template
 import requests
 import json
@@ -11,11 +12,11 @@ app = Flask(__name__)
 CONTAS = {
     "udx": {
         "nome": "UDX",
-        "token": "ced66a42848f546e630ba4f44ccbe9203ef8ca7f",
+        "token": os.environ.get("TOKEN_UDX", ""),
     },
     "rgx": {
         "nome": "RGX",
-        "token": "7478429c9b64d4db35c66ade10743a1dd33b83ad164aa8ce1cdc266c59a4d1ad",
+        "token": os.environ.get("TOKEN_RGX", ""),
     },
 }
 
